@@ -1,59 +1,28 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Popover,
-  PopoverContent,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { Dices, Download, Link2, RefreshCw, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { Dices, Download, Heart, Link2, Redo2, Undo2, X, type LucideIcon } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect } from "react";
 import { toast } from "sonner";
+import { IconButton } from "./fields";
+import { thumbnail, useGallery } from "./gallery";
 import { SUCCESS, tapHaptic, useStoreHaptics, vibrate } from "./haptics";
+import { Swatch } from "./icons";
+import { BREEDS, type Breed } from "./params";
 import { isPresetId, PRESETS, type PresetId } from "./presets";
-import { BodyIcon, HeadIcon } from "./icons";
+import { BuildSettings } from "./sections";
 import { decodeCow, encodeCow } from "./share";
 import { requestSnapshot } from "./snapshot";
-import {
-  BREEDS,
-  CREAM,
-  useCow,
-  type BreedId,
-  type Extra,
-  type Horns,
-  type Mode,
-} from "./store";
+import { useCow, type Mode } from "./store";
 
 const Scene = dynamic(() => import("./Scene"), { ssr: false });
 
 const PRESET_IDS = Object.keys(PRESETS) as PresetId[];
-const BREED_IDS = Object.keys(BREEDS) as BreedId[];
-
-const HORNS: { id: Horns; label: string }[] = [
-  { id: "none", label: "None" },
-  { id: "nubs", label: "Nubs" },
-  { id: "long", label: "Long" },
-];
-
-const EXTRAS: { id: Extra; label: string }[] = [
-  { id: "none", label: "None" },
-  { id: "bell", label: "Bell" },
-  { id: "crown", label: "Flower crown" },
-  { id: "hat", label: "Hat" },
-];
 
 function download() {
   requestSnapshot((src) => {
@@ -61,7 +30,7 @@ function download() {
     out.width = src.width;
     out.height = src.height;
     const ctx = out.getContext("2d")!;
-    ctx.fillStyle = CREAM;
+    ctx.fillStyle = useCow.getState().background;
     ctx.fillRect(0, 0, out.width, out.height);
     ctx.drawImage(src, 0, 0);
     out.toBlob((blob) => {
@@ -87,17 +56,13 @@ async function copyLink() {
   vibrate(SUCCESS);
 }
 
-const DESKTOP = "(min-width: 48rem)";
-function useIsDesktop() {
-  return useSyncExternalStore(
-    (onChange) => {
-      const mq = window.matchMedia(DESKTOP);
-      mq.addEventListener("change", onChange);
-      return () => mq.removeEventListener("change", onChange);
-    },
-    () => window.matchMedia(DESKTOP).matches,
-    () => true,
-  );
+function saveCow() {
+  const hash = encodeCow(useCow.getState());
+  requestSnapshot((canvas) => {
+    const stored = useGallery.getState().add(hash, thumbnail(canvas));
+    toast(stored ? "Saved to your cows" : "Saved for now. This browser won’t keep it after you leave.");
+    vibrate(SUCCESS);
+  });
 }
 
 function useCowInUrl() {
@@ -105,7 +70,7 @@ function useCowInUrl() {
     const hash = window.location.hash.slice(1);
     const fromUrl = decodeCow(hash);
     if (isPresetId(hash)) useCow.getState().applyPreset(hash);
-    else if (fromUrl) useCow.getState().set(fromUrl);
+    else if (fromUrl) useCow.getState().load(fromUrl, { history: false });
 
     const write = () => history.replaceState(null, "", cowHash());
     write();
@@ -124,49 +89,37 @@ function useCowInUrl() {
   }, []);
 }
 
-function IconButton({
-  label,
-  icon: Icon,
-  onClick,
-  variant = "outline",
-}: {
-  label: string;
-  icon: LucideIcon;
-  onClick: () => void;
-  variant?: "outline" | "ghost";
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        ref={tapHaptic}
-        render={
-          <Button
-            variant={variant}
-            size="icon-lg"
-            aria-label={label}
-            onClick={onClick}
-            className="rounded-full"
-          />
-        }
-      >
-        <Icon />
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
+function useUndoShortcuts() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      const { undo, redo } = useCow.getState();
+      if (key === "z" && !e.shiftKey) undo();
+      else if ((key === "z" && e.shiftKey) || key === "y") redo();
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 }
 
-function Swatch({ breed, className }: { breed: BreedId; className?: string }) {
-  const b = BREEDS[breed];
+function HistoryButtons() {
+  const canUndo = useCow((s) => s.past.length > 0);
+  const canRedo = useCow((s) => s.future.length > 0);
+  const undo = useCow((s) => s.undo);
+  const redo = useCow((s) => s.redo);
+  if (!canUndo && !canRedo) return null;
   return (
-    <span
-      className={cn("size-10 shrink-0 rounded-full shadow-inner", className)}
-      style={{
-        background: b.spots
-          ? `radial-gradient(circle at 65% 35%, ${b.spot} 0 28%, transparent 29%), radial-gradient(circle at 30% 72%, ${b.spot} 0 18%, transparent 19%), ${b.base}`
-          : b.base,
-      }}
-    />
+    <div className="cow-pop flex gap-0.5">
+      <span className={canUndo ? undefined : "pointer-events-none opacity-40"}>
+        <IconButton label="Undo" icon={Undo2} variant="ghost" size="icon-sm" onClick={undo} />
+      </span>
+      <span className={canRedo ? undefined : "pointer-events-none opacity-40"}>
+        <IconButton label="Redo" icon={Redo2} variant="ghost" size="icon-sm" onClick={redo} />
+      </span>
+    </div>
   );
 }
 
@@ -183,6 +136,7 @@ function FamousPicker() {
     >
       {PRESET_IDS.map((id) => {
         const p = PRESETS[id];
+        const b: Breed = BREEDS[p.cow.breed];
         return (
           <ToggleGroupItem
             key={id}
@@ -190,7 +144,7 @@ function FamousPicker() {
             value={id}
             className="h-auto justify-start gap-3 rounded-xl px-2 py-2"
           >
-            <Swatch breed={p.cow.breed} className="size-8" />
+            <Swatch base={b.colors.base} spot={b.colors.spot} pattern={b.pattern} className="size-8" />
             <span className="flex min-w-0 flex-col items-start">
               <span className="truncate font-medium">{p.name}</span>
               <span className="text-xs font-normal text-muted-foreground">
@@ -219,225 +173,53 @@ function StoryCard({ className }: { className?: string }) {
   );
 }
 
-const LEVELS = [0.1, 0.5, 0.95];
-const nearest = (levels: number[], v: number) =>
-  levels.reduce((best, l) => (Math.abs(l - v) < Math.abs(best - v) ? l : best));
+function SavedCows() {
+  const items = useGallery((s) => s.items);
+  const remove = useGallery((s) => s.remove);
+  const hydrate = useGallery((s) => s.hydrate);
+  const load = useCow((s) => s.load);
+  useEffect(hydrate, [hydrate]);
 
-const CHUBBY_NAMES = ["Slim", "Round", "Chonky"];
-const LEG_NAMES = ["short legs", "medium legs", "long legs"];
-const bodyLabel = (chubby: number, legs: number) =>
-  `${CHUBBY_NAMES[LEVELS.indexOf(nearest(LEVELS, chubby))]}, ${
-    LEG_NAMES[LEVELS.indexOf(nearest(LEVELS, legs))]
-  }`;
-
-function VisualPicker<T extends string>({
-  value,
-  onChange,
-  columns,
-  options,
-}: {
-  value: T | null;
-  onChange: (v: T) => void;
-  columns: number;
-  options: { id: T; label: string; visual: ReactNode }[];
-}) {
-  return (
-    <ToggleGroup
-      value={value ? [value] : []}
-      onValueChange={([v]) => v && onChange(v as T)}
-      className="grid gap-1"
-      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-    >
-      {options.map((o) => (
-        <ToggleGroupItem
-          key={o.id}
-          ref={tapHaptic}
-          value={o.id}
-          aria-label={o.label}
-          className="h-auto flex-col gap-1 p-1.5 aria-pressed:ring-2 aria-pressed:ring-primary"
-        >
-          {o.visual}
-          <span className="text-[11px] font-normal text-muted-foreground">{o.label}</span>
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
-  );
-}
-
-function SliderField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <Label className="w-14 shrink-0">{label}</Label>
-      <div className="w-44">
-        <Slider
-          aria-label={label}
-          min={0}
-          max={1}
-          step={0.01}
-          value={[value]}
-          onValueChange={(v) => onChange(Array.isArray(v) ? v[0] : v)}
-        />
-      </div>
-    </div>
-  );
-}
-
-function BreedPanel() {
-  const breed = useCow((s) => s.breed);
-  const spots = useCow((s) => s.spots);
-  const set = useCow((s) => s.set);
-  const reroll = useCow((s) => s.reroll);
   return (
     <div className="flex flex-col gap-3">
-      <VisualPicker
-        value={breed}
-        onChange={(id) => set({ breed: id })}
-        columns={4}
-        options={BREED_IDS.map((id) => ({
-          id,
-          label: BREEDS[id].name,
-          visual: <Swatch breed={id} />,
-        }))}
-      />
-      {BREEDS[breed].spots && (
-        <div className="flex items-center gap-2">
-          <SliderField label="Spots" value={spots} onChange={(v) => set({ spots: v })} />
-          <IconButton
-            label="New spot pattern"
-            icon={RefreshCw}
-            onClick={reroll}
-            variant="ghost"
-          />
-        </div>
+      <Button ref={tapHaptic} variant="outline" onClick={saveCow} className="rounded-xl">
+        <Heart data-icon="inline-start" />
+        Save this cow
+      </Button>
+      {items.length === 0 ? (
+        <p className="px-1 text-sm leading-relaxed text-muted-foreground">
+          Cows you save show up here, on this device.
+        </p>
+      ) : (
+        <ul className="grid grid-cols-3 gap-2 md:grid-cols-2">
+          {items.map((c) => (
+            <li key={c.id} className="group relative">
+              <button
+                ref={tapHaptic}
+                type="button"
+                aria-label="Load this cow"
+                onClick={() => {
+                  const cow = decodeCow(c.hash);
+                  if (cow) load(cow);
+                }}
+                className="block w-full overflow-hidden rounded-xl ring-1 ring-foreground/10 transition-shadow hover:ring-2 hover:ring-primary"
+              >
+                {/* Data URLs from the canvas; next/image would add nothing here. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={c.thumb} alt="" className="aspect-4/3 w-full object-cover" />
+              </button>
+              <button
+                type="button"
+                aria-label="Delete this cow"
+                onClick={() => remove(c.id)}
+                className="absolute top-1 right-1 grid size-6 place-items-center rounded-full bg-background/90 text-muted-foreground shadow-sm ring-1 ring-foreground/10 hover:text-foreground md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+              >
+                <X className="size-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
-    </div>
-  );
-}
-
-function BodyPanel() {
-  const chubby = useCow((s) => s.chubby);
-  const legs = useCow((s) => s.legs);
-  const set = useCow((s) => s.set);
-  return (
-    <div className="flex flex-col gap-3">
-      <SliderField label="Chubby" value={chubby} onChange={(v) => set({ chubby: v })} />
-      <SliderField label="Legs" value={legs} onChange={(v) => set({ legs: v })} />
-    </div>
-  );
-}
-
-function SettingRow({
-  label,
-  value,
-  indicator,
-  children,
-}: {
-  label: string;
-  value: string;
-  indicator?: ReactNode;
-  children: ReactNode;
-}) {
-  // The mobile sheet spans the full width, so open upward over the scene instead.
-  const desktop = useIsDesktop();
-  return (
-    <Popover>
-      <PopoverTrigger
-        ref={tapHaptic}
-        render={
-          <Button
-            variant="outline"
-            className="h-auto w-full justify-between rounded-xl px-3 py-2 text-left"
-          />
-        }
-      >
-        <span className="flex flex-col items-start">
-          <span className="text-xs font-normal text-muted-foreground">{label}</span>
-          <span className="font-medium">{value}</span>
-        </span>
-        {indicator}
-      </PopoverTrigger>
-      <PopoverContent
-        side={desktop ? "right" : "top"}
-        align={desktop ? "start" : "center"}
-        sideOffset={desktop ? 16 : 8}
-        className="w-auto max-w-[calc(100vw-2rem)] p-4"
-      >
-        <PopoverHeader>
-          <PopoverTitle>{label}</PopoverTitle>
-        </PopoverHeader>
-        {children}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function BuildSettings() {
-  const preset = useCow((s) => s.preset);
-  const breed = useCow((s) => s.breed);
-  const chubby = useCow((s) => s.chubby);
-  const legs = useCow((s) => s.legs);
-  const horns = useCow((s) => s.horns);
-  const extra = useCow((s) => s.extra);
-  const set = useCow((s) => s.set);
-  return (
-    <div className="flex flex-col gap-2">
-      {preset && (
-        <Badge variant="secondary" className="self-start">
-          Starting from {PRESETS[preset].name}
-        </Badge>
-      )}
-      <SettingRow
-        label="Breed"
-        value={BREEDS[breed].name}
-        indicator={<Swatch breed={breed} className="size-6" />}
-      >
-        <BreedPanel />
-      </SettingRow>
-      <SettingRow
-        label="Body"
-        value={bodyLabel(chubby, legs)}
-        indicator={<span className="block h-6 w-8"><BodyIcon breed={breed} chubby={chubby} legs={legs} className="size-full" /></span>}
-      >
-        <BodyPanel />
-      </SettingRow>
-      <SettingRow
-        label="Horns"
-        value={HORNS.find((h) => h.id === horns)!.label}
-        indicator={<span className="block size-7"><HeadIcon breed={breed} horns={horns} extra="none" className="size-full" /></span>}
-      >
-        <VisualPicker
-          value={horns}
-          onChange={(v) => set({ horns: v })}
-          columns={3}
-          options={HORNS.map((h) => ({
-            ...h,
-            visual: <span className="block size-14"><HeadIcon breed={breed} horns={h.id} extra="none" className="size-full" /></span>,
-          }))}
-        />
-      </SettingRow>
-      <SettingRow
-        label="Extras"
-        value={EXTRAS.find((e) => e.id === extra)!.label}
-        indicator={<span className="block size-7"><HeadIcon breed={breed} horns={horns} extra={extra} className="size-full" /></span>}
-      >
-        <VisualPicker
-          value={extra}
-          onChange={(v) => set({ extra: v })}
-          columns={4}
-          options={EXTRAS.map((e) => ({
-            ...e,
-            visual: <span className="block size-14"><HeadIcon breed={breed} horns={horns} extra={e.id} className="size-full" /></span>,
-          }))}
-        />
-      </SettingRow>
     </div>
   );
 }
@@ -463,8 +245,8 @@ function ActionButton({
       className="rounded-xl"
     >
       <Icon data-icon="inline-start" />
-      <span className="md:hidden">{shortLabel}</span>
-      <span className="hidden md:inline">{label}</span>
+      <span className="side:hidden short:inline">{shortLabel}</span>
+      <span className="hidden side:inline short:hidden">{label}</span>
     </Button>
   );
 }
@@ -475,42 +257,50 @@ export function Builder() {
   const randomize = useCow((s) => s.randomize);
   useCowInUrl();
   useStoreHaptics();
+  useUndoShortcuts();
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-background">
-      <div className="absolute inset-x-0 top-0 bottom-[45dvh] md:bottom-0 md:left-72">
+      <div className="absolute inset-x-0 top-0 bottom-[45dvh] side:bottom-0 side:left-72">
         <Scene />
       </div>
 
       {mode === "famous" && (
-        <StoryCard className="cow-pop absolute top-4 right-4 hidden max-w-xs md:flex" />
+        <StoryCard className="cow-pop absolute top-4 right-4 hidden max-w-xs side:flex short:hidden" />
       )}
 
       <Tabs
         value={mode}
         onValueChange={(v) => setMode(v as Mode)}
         render={<aside />}
-        className="absolute inset-x-3 bottom-[max(--spacing(3),env(safe-area-inset-bottom))] max-h-[45dvh] gap-3 rounded-3xl bg-card p-3 shadow-sm ring-1 ring-foreground/10 md:inset-x-auto md:top-4 md:bottom-4 md:left-4 md:max-h-none md:w-64"
+        className="absolute inset-x-3 bottom-[max(--spacing(3),env(safe-area-inset-bottom))] max-h-[45dvh] gap-3 rounded-3xl bg-card p-3 shadow-sm ring-1 ring-foreground/10 side:inset-x-auto side:top-4 side:bottom-4 side:left-4 side:max-h-none side:w-64"
       >
-        <h1 className="px-1 text-lg font-semibold tracking-tight">moo maker</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="px-1 text-lg font-semibold tracking-tight">moo maker</h1>
+          <HistoryButtons />
+        </div>
         <TabsList className="w-full">
           <TabsTrigger ref={tapHaptic} value="famous">Famous cows</TabsTrigger>
           <TabsTrigger ref={tapHaptic} value="build">Build</TabsTrigger>
+          <TabsTrigger ref={tapHaptic} value="saved">Saved</TabsTrigger>
         </TabsList>
 
         <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
           <TabsContent value="famous" className="flex flex-col gap-2">
-            <StoryCard className="md:hidden" />
+            <StoryCard className="side:hidden short:flex" />
             <FamousPicker />
           </TabsContent>
           <TabsContent value="build">
             <BuildSettings />
           </TabsContent>
+          <TabsContent value="saved">
+            <SavedCows />
+          </TabsContent>
         </div>
 
         <Separator />
-        <div className="grid grid-cols-3 gap-2 md:grid-cols-1">
-          <ActionButton label="Shuffle" shortLabel="Shuffle" icon={Dices} onClick={randomize} />
+        <div className="grid grid-cols-3 gap-2 side:grid-cols-1 short:grid-cols-3">
+          <ActionButton label="Shuffle" shortLabel="Shuffle" icon={Dices} onClick={() => randomize()} />
           <ActionButton label="Copy link" shortLabel="Share" icon={Link2} onClick={copyLink} />
           <ActionButton label="Download PNG" shortLabel="Save" icon={Download} onClick={download} />
         </div>

@@ -1,15 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { PopIn } from "./anim";
-import { clay } from "./materials";
+import { PopIn, type SpringState } from "./anim";
+import { useLiveMaterial } from "./materials";
+import { lerp, type CowConfig } from "./params";
+import { useCow } from "./store";
 
-const HORN = "#F3E6CC";
 const TUBULAR = 32;
 const RADIAL = 16;
 
-function taperedTube(points: [number, number, number][], radius: number, tip: number) {
+type Point = [number, number, number];
+
+function taperedTube(points: Point[], radius: number, tip: number) {
   const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)));
   const geometry = new THREE.TubeGeometry(curve, TUBULAR, radius, RADIAL, false);
   const pos = geometry.attributes.position;
@@ -28,59 +32,95 @@ function taperedTube(points: [number, number, number][], radius: number, tip: nu
   return { geometry, end: curve.getPointAt(1), tipRadius: radius * tip };
 }
 
+// Long horns blend between sticking straight out (curl 0) and sweeping up into a lyre (curl 1).
+const STRAIGHT: Point[] = [
+  [0, 0, 0],
+  [0, 0.02, 0.15],
+  [0.02, 0.05, 0.3],
+  [0.04, 0.08, 0.45],
+];
+const LYRE: Point[] = [
+  [0, 0, 0],
+  [0, 0.07, 0.13],
+  [0.03, 0.22, 0.22],
+  [0.09, 0.4, 0.18],
+];
+
 const SHAPES = {
   nubs: {
     base: [-0.04, 0.33, 0.2],
     radius: 0.06,
     tip: 0.6,
-    points: [
-      [0, 0, 0],
-      [0, 0.07, 0.03],
-      [0.01, 0.12, 0.06],
-    ],
+    points: () =>
+      [
+        [0, 0, 0],
+        [0, 0.07, 0.03],
+        [0.01, 0.12, 0.06],
+      ] as Point[],
   },
   long: {
     base: [-0.04, 0.3, 0.22],
     radius: 0.07,
     tip: 0.25,
-    points: [
-      [0, 0, 0],
-      [0, 0.04, 0.14],
-      [0.02, 0.12, 0.28],
-      [0.06, 0.29, 0.34],
-    ],
+    points: (curl: number) =>
+      STRAIGHT.map((p, i) => p.map((v, j) => lerp(v, LYRE[i][j], curl)) as Point),
   },
 } as const;
 
-function Horn({ kind, side }: { kind: keyof typeof SHAPES; side: 1 | -1 }) {
+type Kind = keyof typeof SHAPES;
+
+const selectColor = (s: CowConfig) => s.hornColor;
+
+function Horn({
+  kind,
+  side,
+  curl,
+  length,
+  material,
+}: {
+  kind: Kind;
+  side: 1 | -1;
+  curl: number;
+  length: SpringState;
+  material: THREE.Material;
+}) {
   const shape = SHAPES[kind];
+  const grow = useRef<THREE.Group>(null);
   const { geometry, end, tipRadius } = useMemo(
     () =>
       taperedTube(
-        shape.points.map(([x, y, z]) => [x, y, z * side] as [number, number, number]),
+        shape.points(curl).map(([x, y, z]) => [x, y, z * side] as Point),
         shape.radius,
         shape.tip,
       ),
-    [shape, side],
+    [shape, side, curl],
   );
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  useFrame(() => grow.current?.scale.setScalar(lerp(0.5, 1.5, length.x)));
   const [bx, by, bz] = shape.base;
 
   return (
     <PopIn position={[bx, by, bz * side]}>
-      <mesh geometry={geometry} material={clay(HORN, 0.4)} />
-      <mesh position={end} material={clay(HORN, 0.4)}>
-        <sphereGeometry args={[tipRadius, 16, 12]} />
-      </mesh>
+      <group ref={grow}>
+        <mesh geometry={geometry} material={material} />
+        <mesh position={end} material={material}>
+          <sphereGeometry args={[tipRadius, 16, 12]} />
+        </mesh>
+      </group>
     </PopIn>
   );
 }
 
-export function Horns({ kind }: { kind: "none" | keyof typeof SHAPES }) {
+export function Horns({ length }: { length: SpringState }) {
+  const kind = useCow((s) => s.horns);
+  // Curl rebuilds the tube, so round it to keep slider drags from regenerating every pixel.
+  const curl = useCow((s) => Math.round(s.hornCurl * 50) / 50);
+  const material = useLiveMaterial(selectColor, "clay", 0.4);
   if (kind === "none") return null;
   return (
     <>
-      <Horn key={`${kind}+`} kind={kind} side={1} />
-      <Horn key={`${kind}-`} kind={kind} side={-1} />
+      <Horn key={`${kind}+`} kind={kind} side={1} curl={curl} length={length} material={material} />
+      <Horn key={`${kind}-`} kind={kind} side={-1} curl={curl} length={length} material={material} />
     </>
   );
 }

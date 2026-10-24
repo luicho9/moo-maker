@@ -2,6 +2,12 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Side panel layout: wide screens, and phones on their side where a bottom sheet
+   would leave no room. Keep in sync with SIDE_PANEL in components/cow/fields.tsx. */
+@custom-variant side (@media (min-width: 48rem) or ((orientation: landscape) and (max-height: 32rem)));
+/* Too short to stack the sidebar actions. */
+@custom-variant short (@media (max-height: 32rem));
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

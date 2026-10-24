@@ -1,6 +1,7 @@
 "use client";
 
 import * as THREE from "three";
+import { useCow } from "./store";
 
 let texture: THREE.CanvasTexture | null = null;
 
@@ -11,9 +12,9 @@ function getTexture() {
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext("2d")!;
   const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  g.addColorStop(0, "rgba(70,48,30,1)");
-  g.addColorStop(0.5, "rgba(70,48,30,0.5)");
-  g.addColorStop(1, "rgba(70,48,30,0)");
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.5, "rgba(255,255,255,0.5)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
   texture = new THREE.CanvasTexture(canvas);
@@ -29,6 +30,8 @@ export function BlobShadow({
   scale?: [number, number];
   opacity?: number;
 }) {
+  // Warm brown reads as a shadow on light backgrounds but glows orange on dark ones.
+  const dark = useCow((s) => new THREE.Color(s.background).getHSL({ h: 0, s: 0, l: 0 }).l < 0.35);
   return (
     <mesh
       position={[position[0], position[1] + 0.002, position[2]]}
@@ -37,7 +40,7 @@ export function BlobShadow({
       raycast={() => null}
     >
       <planeGeometry />
-      <meshBasicMaterial map={getTexture()} transparent depthWrite={false} opacity={opacity} />
+      <meshBasicMaterial color={dark ? "#05040A" : "#46301E"} map={getTexture()} transparent depthWrite={false} opacity={opacity} />
     </mesh>
   );
 }
