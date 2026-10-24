@@ -1,8 +1,16 @@
 import { create } from "zustand";
+import { PRESETS, type PresetId } from "./presets";
 
 export const CREAM = "#FAF6EE";
 
-export type BreedId = "holstein" | "jersey" | "highland" | "pastel";
+export type BreedId =
+  | "holstein"
+  | "jersey"
+  | "guernsey"
+  | "fleckvieh"
+  | "gloucester"
+  | "highland"
+  | "pastel";
 export type Horns = "none" | "nubs" | "long";
 export type Extra = "none" | "bell" | "crown" | "hat";
 
@@ -35,6 +43,33 @@ export const BREEDS: Record<BreedId, Breed> = {
     spots: true,
     tuft: false,
   },
+  guernsey: {
+    name: "Guernsey",
+    base: "#D99B5E",
+    spot: "#F6F1E7",
+    snout: "#F2C9A6",
+    hoof: "#6B4A33",
+    spots: true,
+    tuft: false,
+  },
+  fleckvieh: {
+    name: "Fleckvieh",
+    base: "#F6F1E7",
+    spot: "#B5582E",
+    snout: "#F2B9A8",
+    hoof: "#4A3A30",
+    spots: true,
+    tuft: false,
+  },
+  gloucester: {
+    name: "Gloucester",
+    base: "#4E2B1F",
+    spot: "#4E2B1F",
+    snout: "#2E2420",
+    hoof: "#241B17",
+    spots: false,
+    tuft: false,
+  },
   highland: {
     name: "Highland",
     base: "#C6713A",
@@ -55,6 +90,8 @@ export const BREEDS: Record<BreedId, Breed> = {
   },
 };
 
+export type Mode = "famous" | "build";
+
 export type CowConfig = {
   breed: BreedId;
   spots: number;
@@ -66,9 +103,12 @@ export type CowConfig = {
 };
 
 type CowStore = CowConfig & {
-  /** Increments on every moo so the scene can react. */
+  mode: Mode;
+  preset: PresetId | null;
   moos: number;
   set: (patch: Partial<CowConfig>) => void;
+  applyPreset: (id: PresetId) => void;
+  setMode: (mode: Mode) => void;
   reroll: () => void;
   randomize: () => void;
   moo: () => void;
@@ -87,11 +127,17 @@ export const useCow = create<CowStore>((set) => ({
   legs: 0.35,
   horns: "nubs",
   extra: "bell",
+  mode: "build",
+  preset: null,
   moos: 0,
-  set: (patch) => set(patch),
-  reroll: () => set({ seed: randomSeed() }),
+  set: (patch) => set({ ...patch, preset: null }),
+  applyPreset: (id) => set({ ...PRESETS[id].cow, preset: id, mode: "famous" }),
+  setMode: (mode) => set({ mode }),
+  reroll: () => set({ seed: randomSeed(), preset: null }),
   randomize: () =>
     set({
+      preset: null,
+      mode: "build",
       breed: pick(Object.keys(BREEDS) as BreedId[]),
       spots: 0.25 + Math.random() * 0.6,
       seed: randomSeed(),
