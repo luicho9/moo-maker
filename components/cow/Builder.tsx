@@ -1,20 +1,57 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Popover,
+  PopoverContent,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { Dices, Download, Link2, RefreshCw, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect } from "react";
+import { toast } from "sonner";
+import { isPresetId, PRESETS, type PresetId } from "./presets";
+import { BodyIcon, HeadIcon } from "./icons";
 import { decodeCow, encodeCow } from "./share";
-import { BREEDS, CREAM, useCow, type BreedId, type Extra, type Horns } from "./store";
+import {
+  BREEDS,
+  CREAM,
+  useCow,
+  type BreedId,
+  type Extra,
+  type Horns,
+  type Mode,
+} from "./store";
 
 const Scene = dynamic(() => import("./Scene"), { ssr: false });
 
-const TABS = [
-  { id: "breed", label: "Breed", tint: "#FF9F5A" },
-  { id: "body", label: "Body", tint: "#F5C63C" },
-  { id: "horns", label: "Horns", tint: "#7FCB72" },
-  { id: "extras", label: "Extras", tint: "#7CC4F2" },
-] as const;
+const PRESET_IDS = Object.keys(PRESETS) as PresetId[];
+const BREED_IDS = Object.keys(BREEDS) as BreedId[];
 
-type TabId = (typeof TABS)[number]["id"];
+const HORNS: { id: Horns; label: string }[] = [
+  { id: "none", label: "None" },
+  { id: "nubs", label: "Nubs" },
+  { id: "long", label: "Long" },
+];
+
+const EXTRAS: { id: Extra; label: string }[] = [
+  { id: "none", label: "None" },
+  { id: "bell", label: "Bell" },
+  { id: "crown", label: "Flower crown" },
+  { id: "hat", label: "Hat" },
+];
 
 function download() {
   const src = document.querySelector<HTMLCanvasElement>("#cow-canvas canvas");
@@ -32,51 +69,169 @@ function download() {
   a.click();
 }
 
-function RoundButton({
+async function copyLink() {
+  await navigator.clipboard.writeText(window.location.href);
+  toast("Link copied");
+}
+
+function useCowInUrl() {
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    const fromUrl = decodeCow(hash);
+    if (isPresetId(hash)) useCow.getState().applyPreset(hash);
+    else if (fromUrl) useCow.getState().set(fromUrl);
+
+    const write = () => {
+      const s = useCow.getState();
+      history.replaceState(null, "", `#${s.preset ?? encodeCow(s)}`);
+    };
+    write();
+    return useCow.subscribe((s, prev) => {
+      if (s.moos === prev.moos) write();
+    });
+  }, []);
+}
+
+function IconButton({
   label,
+  icon: Icon,
   onClick,
-  children,
+  size = "icon-lg",
+  variant = "outline",
 }: {
   label: string;
+  icon: LucideIcon;
   onClick: () => void;
-  children: ReactNode;
+  size?: "icon-lg" | "icon-sm";
+  variant?: "outline" | "ghost";
 }) {
   return (
-    <button
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className="grid size-11 place-items-center rounded-full bg-white/80 text-stone-700 shadow-[0_2px_10px_rgba(80,60,40,0.12)] backdrop-blur transition-transform hover:scale-105 active:scale-95"
-    >
-      {children}
-    </button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant={variant}
+            size={size}
+            aria-label={label}
+            onClick={onClick}
+            className="rounded-full"
+          />
+        }
+      >
+        <Icon />
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
-function Chip({
-  active,
-  onClick,
-  children,
+function Swatch({ breed, className }: { breed: BreedId; className?: string }) {
+  const b = BREEDS[breed];
+  return (
+    <span
+      className={cn("size-10 shrink-0 rounded-full shadow-inner", className)}
+      style={{
+        background: b.spots
+          ? `radial-gradient(circle at 65% 35%, ${b.spot} 0 28%, transparent 29%), radial-gradient(circle at 30% 72%, ${b.spot} 0 18%, transparent 19%), ${b.base}`
+          : b.base,
+      }}
+    />
+  );
+}
+
+function FamousPicker() {
+  const preset = useCow((s) => s.preset);
+  const applyPreset = useCow((s) => s.applyPreset);
+  return (
+    <ToggleGroup
+      value={preset ? [preset] : []}
+      onValueChange={([id]) => id && applyPreset(id as PresetId)}
+      orientation="vertical"
+      spacing={1}
+      className="w-full"
+    >
+      {PRESET_IDS.map((id) => {
+        const p = PRESETS[id];
+        return (
+          <ToggleGroupItem
+            key={id}
+            value={id}
+            className="h-auto justify-start gap-3 rounded-xl px-2 py-2"
+          >
+            <Swatch breed={p.cow.breed} className="size-8" />
+            <span className="flex min-w-0 flex-col items-start">
+              <span className="truncate font-medium">{p.name}</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {p.meta.split(" · ").at(-1)}
+              </span>
+            </span>
+          </ToggleGroupItem>
+        );
+      })}
+    </ToggleGroup>
+  );
+}
+
+function StoryCard({ className }: { className?: string }) {
+  const preset = useCow((s) => s.preset);
+  if (!preset) return null;
+  const p = PRESETS[preset];
+  return (
+    <Card key={preset} size="sm" className={className}>
+      <CardHeader>
+        <CardTitle>{p.name}</CardTitle>
+        <CardDescription>{p.meta}</CardDescription>
+      </CardHeader>
+      <CardContent className="leading-relaxed text-muted-foreground">{p.story}</CardContent>
+    </Card>
+  );
+}
+
+const LEVELS = [0.1, 0.5, 0.95];
+const nearest = (levels: number[], v: number) =>
+  levels.reduce((best, l) => (Math.abs(l - v) < Math.abs(best - v) ? l : best));
+
+const CHUBBY_NAMES = ["Slim", "Round", "Chonky"];
+const LEG_NAMES = ["short legs", "medium legs", "long legs"];
+const bodyLabel = (chubby: number, legs: number) =>
+  `${CHUBBY_NAMES[LEVELS.indexOf(nearest(LEVELS, chubby))]}, ${
+    LEG_NAMES[LEVELS.indexOf(nearest(LEVELS, legs))]
+  }`;
+
+function VisualPicker<T extends string>({
+  value,
+  onChange,
+  columns,
+  options,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
+  value: T | null;
+  onChange: (v: T) => void;
+  columns: number;
+  options: { id: T; label: string; visual: ReactNode }[];
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`rounded-full px-4 py-2 text-sm font-medium transition-all active:scale-95 ${
-        active
-          ? "bg-stone-800 text-white"
-          : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-      }`}
+    <ToggleGroup
+      value={value ? [value] : []}
+      onValueChange={([v]) => v && onChange(v as T)}
+      className="grid gap-1"
+      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
     >
-      {children}
-    </button>
+      {options.map((o) => (
+        <ToggleGroupItem
+          key={o.id}
+          value={o.id}
+          aria-label={o.label}
+          className="h-auto flex-col gap-1 p-1.5 aria-pressed:ring-2 aria-pressed:ring-primary"
+        >
+          {o.visual}
+          <span className="text-[11px] font-normal text-muted-foreground">{o.label}</span>
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
   );
 }
 
-function Slider({
+function SliderField({
   label,
   value,
   onChange,
@@ -86,63 +241,49 @@ function Slider({
   onChange: (v: number) => void;
 }) {
   return (
-    <label className="flex items-center gap-3 text-sm text-stone-600">
-      <span className="w-14 shrink-0">{label}</span>
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="cow-range w-44"
-      />
-    </label>
+    <div className="flex items-center gap-3">
+      <Label className="w-14 shrink-0">{label}</Label>
+      <div className="w-44">
+        <Slider
+          aria-label={label}
+          min={0}
+          max={1}
+          step={0.01}
+          value={[value]}
+          onValueChange={(v) => onChange(Array.isArray(v) ? v[0] : v)}
+        />
+      </div>
+    </div>
   );
 }
 
 function BreedPanel() {
-  const { breed, spots, set, reroll } = useCow();
+  const breed = useCow((s) => s.breed);
+  const spots = useCow((s) => s.spots);
+  const set = useCow((s) => s.set);
+  const reroll = useCow((s) => s.reroll);
   return (
-    <div className="flex flex-col items-center gap-3">
-      <div className="flex gap-3">
-        {(Object.keys(BREEDS) as BreedId[]).map((id) => {
-          const b = BREEDS[id];
-          return (
-            <button
-              key={id}
-              onClick={() => set({ breed: id })}
-              className="flex flex-col items-center gap-1"
-            >
-              <span
-                className={`size-11 rounded-full shadow-inner transition-transform active:scale-90 ${
-                  breed === id ? "ring-2 ring-stone-800 ring-offset-2" : ""
-                }`}
-                style={{
-                  background: b.spots
-                    ? `radial-gradient(circle at 65% 35%, ${b.spot} 0 28%, transparent 29%), radial-gradient(circle at 30% 72%, ${b.spot} 0 18%, transparent 19%), ${b.base}`
-                    : b.base,
-                }}
-              />
-              <span className="text-xs text-stone-500">{b.name}</span>
-            </button>
-          );
-        })}
-      </div>
+    <div className="flex flex-col gap-3">
+      <VisualPicker
+        value={breed}
+        onChange={(id) => set({ breed: id })}
+        columns={4}
+        options={BREED_IDS.map((id) => ({
+          id,
+          label: BREEDS[id].name,
+          visual: <Swatch breed={id} />,
+        }))}
+      />
       {BREEDS[breed].spots && (
         <div className="flex items-center gap-2">
-          <Slider label="Spots" value={spots} onChange={(v) => set({ spots: v })} />
-          <button
-            aria-label="New spot pattern"
-            title="New spot pattern"
+          <SliderField label="Spots" value={spots} onChange={(v) => set({ spots: v })} />
+          <IconButton
+            label="New spot pattern"
+            icon={RefreshCw}
             onClick={reroll}
-            className="grid size-8 place-items-center rounded-full bg-stone-100 text-stone-600 hover:bg-stone-200 active:scale-90"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-              <path d="M21 3v6h-6" />
-            </svg>
-          </button>
+            size="icon-sm"
+            variant="ghost"
+          />
         </div>
       )}
     </div>
@@ -150,150 +291,179 @@ function BreedPanel() {
 }
 
 function BodyPanel() {
-  const { chubby, legs, set } = useCow();
+  const chubby = useCow((s) => s.chubby);
+  const legs = useCow((s) => s.legs);
+  const set = useCow((s) => s.set);
   return (
-    <div className="flex flex-col gap-2">
-      <Slider label="Chubby" value={chubby} onChange={(v) => set({ chubby: v })} />
-      <Slider label="Legs" value={legs} onChange={(v) => set({ legs: v })} />
+    <div className="flex flex-col gap-3">
+      <SliderField label="Chubby" value={chubby} onChange={(v) => set({ chubby: v })} />
+      <SliderField label="Legs" value={legs} onChange={(v) => set({ legs: v })} />
     </div>
   );
 }
 
-function OptionsPanel<T extends string>({
-  options,
+function SettingRow({
+  label,
   value,
-  onChange,
+  indicator,
+  children,
 }: {
-  options: readonly { id: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
+  label: string;
+  value: string;
+  indicator?: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap justify-center gap-2">
-      {options.map((o) => (
-        <Chip key={o.id} active={value === o.id} onClick={() => onChange(o.id)}>
-          {o.label}
-        </Chip>
-      ))}
-    </div>
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="outline"
+            className="h-auto w-full justify-between rounded-xl px-3 py-2 text-left"
+          />
+        }
+      >
+        <span className="flex flex-col items-start">
+          <span className="text-xs font-normal text-muted-foreground">{label}</span>
+          <span className="font-medium">{value}</span>
+        </span>
+        {indicator}
+      </PopoverTrigger>
+      <PopoverContent side="right" align="start" sideOffset={16} className="w-auto p-4">
+        <PopoverHeader>
+          <PopoverTitle>{label}</PopoverTitle>
+        </PopoverHeader>
+        {children}
+      </PopoverContent>
+    </Popover>
   );
 }
 
-const HORNS: { id: Horns; label: string }[] = [
-  { id: "none", label: "None" },
-  { id: "nubs", label: "Nubs" },
-  { id: "long", label: "Long" },
-];
-
-const EXTRAS: { id: Extra; label: string }[] = [
-  { id: "none", label: "None" },
-  { id: "bell", label: "Bell" },
-  { id: "crown", label: "Flower crown" },
-  { id: "hat", label: "Hat" },
-];
-
-/** Keeps the URL hash in sync with the cow so any cow can be shared as a link. */
-function useCowInUrl() {
-  useEffect(() => {
-    const fromUrl = decodeCow(window.location.hash);
-    if (fromUrl) useCow.getState().set(fromUrl);
-
-    const write = () => {
-      history.replaceState(null, "", `#${encodeCow(useCow.getState())}`);
-    };
-    write();
-    return useCow.subscribe((s, prev) => {
-      if (s.moos === prev.moos) write();
-    });
-  }, []);
-}
-
-export function Builder() {
-  const [tab, setTab] = useState<TabId>("breed");
-  const [copied, setCopied] = useState(false);
-  useCowInUrl();
-
-  const copyLink = async () => {
-    await navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
-  };
+function BuildSettings() {
+  const preset = useCow((s) => s.preset);
+  const breed = useCow((s) => s.breed);
+  const chubby = useCow((s) => s.chubby);
+  const legs = useCow((s) => s.legs);
   const horns = useCow((s) => s.horns);
   const extra = useCow((s) => s.extra);
   const set = useCow((s) => s.set);
+  return (
+    <div className="flex flex-col gap-2">
+      {preset && (
+        <Badge variant="secondary" className="self-start">
+          Starting from {PRESETS[preset].name}
+        </Badge>
+      )}
+      <SettingRow
+        label="Breed"
+        value={BREEDS[breed].name}
+        indicator={<Swatch breed={breed} className="size-6" />}
+      >
+        <BreedPanel />
+      </SettingRow>
+      <SettingRow
+        label="Body"
+        value={bodyLabel(chubby, legs)}
+        indicator={<span className="block h-6 w-8"><BodyIcon breed={breed} chubby={chubby} legs={legs} className="size-full" /></span>}
+      >
+        <BodyPanel />
+      </SettingRow>
+      <SettingRow
+        label="Horns"
+        value={HORNS.find((h) => h.id === horns)!.label}
+        indicator={<span className="block size-7"><HeadIcon breed={breed} horns={horns} extra="none" className="size-full" /></span>}
+      >
+        <VisualPicker
+          value={horns}
+          onChange={(v) => set({ horns: v })}
+          columns={3}
+          options={HORNS.map((h) => ({
+            ...h,
+            visual: <span className="block size-14"><HeadIcon breed={breed} horns={h.id} extra="none" className="size-full" /></span>,
+          }))}
+        />
+      </SettingRow>
+      <SettingRow
+        label="Extras"
+        value={EXTRAS.find((e) => e.id === extra)!.label}
+        indicator={<span className="block size-7"><HeadIcon breed={breed} horns={horns} extra={extra} className="size-full" /></span>}
+      >
+        <VisualPicker
+          value={extra}
+          onChange={(v) => set({ extra: v })}
+          columns={4}
+          options={EXTRAS.map((e) => ({
+            ...e,
+            visual: <span className="block size-14"><HeadIcon breed={breed} horns={horns} extra={e.id} className="size-full" /></span>,
+          }))}
+        />
+      </SettingRow>
+    </div>
+  );
+}
+
+function ActionButton({
+  label,
+  icon: Icon,
+  onClick,
+}: {
+  label: string;
+  icon: LucideIcon;
+  onClick: () => void;
+}) {
+  return (
+    <Button variant="outline" onClick={onClick} className="rounded-xl">
+      <Icon data-icon="inline-start" />
+      {label}
+    </Button>
+  );
+}
+
+export function Builder() {
+  const mode = useCow((s) => s.mode);
+  const setMode = useCow((s) => s.setMode);
   const randomize = useCow((s) => s.randomize);
+  useCowInUrl();
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden" style={{ background: CREAM }}>
-      <div id="cow-canvas" className="absolute inset-0">
+    <main className="relative h-dvh w-full overflow-hidden bg-background">
+      <div id="cow-canvas" className="absolute inset-x-0 top-0 bottom-[45dvh] md:bottom-0 md:left-72">
         <Scene />
       </div>
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-5">
-        <h1 className="text-lg font-semibold tracking-tight text-stone-800">vaquita</h1>
-        <div className="pointer-events-auto flex gap-2">
-          <RoundButton label="Random cow" onClick={randomize}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
-              <rect x="3.5" y="3.5" width="17" height="17" rx="4" />
-              <circle cx="8.5" cy="8.5" r="1.3" fill="currentColor" stroke="none" />
-              <circle cx="15.5" cy="15.5" r="1.3" fill="currentColor" stroke="none" />
-              <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
-            </svg>
-          </RoundButton>
-          <RoundButton label="Copy link" onClick={copyLink}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10 14a4.5 4.5 0 0 0 6.36 0l3-3a4.5 4.5 0 0 0-6.36-6.36l-1 1" />
-              <path d="M14 10a4.5 4.5 0 0 0-6.36 0l-3 3a4.5 4.5 0 0 0 6.36 6.36l1-1" />
-            </svg>
-          </RoundButton>
-          <RoundButton label="Download PNG" onClick={download}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 4v11" />
-              <path d="m7 10 5 5 5-5" />
-              <path d="M5 20h14" />
-            </svg>
-          </RoundButton>
-        </div>
-      </header>
-
-      {copied && (
-        <div className="cow-pop pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-full bg-stone-800 px-4 py-2 text-sm font-medium text-white shadow-lg">
-          Link copied
-        </div>
+      {mode === "famous" && (
+        <StoryCard className="cow-pop absolute top-4 right-4 hidden max-w-xs md:flex" />
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-3 px-4 pb-6">
-        <div
-          key={tab}
-          className="cow-pop pointer-events-auto rounded-3xl bg-white/80 px-5 py-4 shadow-[0_4px_24px_rgba(80,60,40,0.10)] backdrop-blur"
-        >
-          {tab === "breed" && <BreedPanel />}
-          {tab === "body" && <BodyPanel />}
-          {tab === "horns" && (
-            <OptionsPanel options={HORNS} value={horns} onChange={(v) => set({ horns: v })} />
-          )}
-          {tab === "extras" && (
-            <OptionsPanel options={EXTRAS} value={extra} onChange={(v) => set({ extra: v })} />
-          )}
+      <Tabs
+        value={mode}
+        onValueChange={(v) => setMode(v as Mode)}
+        render={<aside />}
+        className="absolute inset-x-3 bottom-3 max-h-[45dvh] gap-3 rounded-3xl bg-card p-3 shadow-sm ring-1 ring-foreground/10 md:inset-x-auto md:top-4 md:bottom-4 md:left-4 md:max-h-none md:w-64"
+      >
+        <h1 className="px-1 text-lg font-semibold tracking-tight">vaquita</h1>
+        <TabsList className="w-full">
+          <TabsTrigger value="famous">Famous cows</TabsTrigger>
+          <TabsTrigger value="build">Build</TabsTrigger>
+        </TabsList>
+
+        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+          <TabsContent value="famous" className="flex flex-col gap-2">
+            <StoryCard className="md:hidden" />
+            <FamousPicker />
+          </TabsContent>
+          <TabsContent value="build">
+            <BuildSettings />
+          </TabsContent>
         </div>
 
-        <nav className="pointer-events-auto flex gap-2">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className="rounded-full px-4 py-2 text-sm font-semibold transition-all active:scale-95"
-              style={
-                tab === t.id
-                  ? { background: t.tint, color: "white" }
-                  : { background: `${t.tint}33`, color: "#57534e" }
-              }
-            >
-              {t.label}
-            </button>
-          ))}
-        </nav>
-      </div>
+        <Separator />
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-1">
+          <ActionButton label="Shuffle" icon={Dices} onClick={randomize} />
+          <ActionButton label="Copy link" icon={Link2} onClick={copyLink} />
+          <ActionButton label="Download PNG" icon={Download} onClick={download} />
+        </div>
+      </Tabs>
     </main>
   );
 }
