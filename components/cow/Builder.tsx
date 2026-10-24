@@ -20,8 +20,9 @@ import { cn } from "@/lib/utils";
 import { Dices, Download, Link2, RefreshCw, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { toast } from "sonner";
+import { SUCCESS, tapHaptic, useStoreHaptics, vibrate } from "./haptics";
 import { isPresetId, PRESETS, type PresetId } from "./presets";
 import { BodyIcon, HeadIcon } from "./icons";
 import { decodeCow, encodeCow } from "./share";
@@ -83,6 +84,20 @@ async function copyLink() {
   const { origin, pathname, search } = window.location;
   await navigator.clipboard.writeText(`${origin}${pathname}${search}${cowHash()}`);
   toast("Link copied");
+  vibrate(SUCCESS);
+}
+
+const DESKTOP = "(min-width: 48rem)";
+function useIsDesktop() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = window.matchMedia(DESKTOP);
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(DESKTOP).matches,
+    () => true,
+  );
 }
 
 function useCowInUrl() {
@@ -113,22 +128,21 @@ function IconButton({
   label,
   icon: Icon,
   onClick,
-  size = "icon-lg",
   variant = "outline",
 }: {
   label: string;
   icon: LucideIcon;
   onClick: () => void;
-  size?: "icon-lg" | "icon-sm";
   variant?: "outline" | "ghost";
 }) {
   return (
     <Tooltip>
       <TooltipTrigger
+        ref={tapHaptic}
         render={
           <Button
             variant={variant}
-            size={size}
+            size="icon-lg"
             aria-label={label}
             onClick={onClick}
             className="rounded-full"
@@ -172,6 +186,7 @@ function FamousPicker() {
         return (
           <ToggleGroupItem
             key={id}
+            ref={tapHaptic}
             value={id}
             className="h-auto justify-start gap-3 rounded-xl px-2 py-2"
           >
@@ -236,6 +251,7 @@ function VisualPicker<T extends string>({
       {options.map((o) => (
         <ToggleGroupItem
           key={o.id}
+          ref={tapHaptic}
           value={o.id}
           aria-label={o.label}
           className="h-auto flex-col gap-1 p-1.5 aria-pressed:ring-2 aria-pressed:ring-primary"
@@ -298,7 +314,6 @@ function BreedPanel() {
             label="New spot pattern"
             icon={RefreshCw}
             onClick={reroll}
-            size="icon-sm"
             variant="ghost"
           />
         </div>
@@ -330,9 +345,12 @@ function SettingRow({
   indicator?: ReactNode;
   children: ReactNode;
 }) {
+  // The mobile sheet spans the full width, so open upward over the scene instead.
+  const desktop = useIsDesktop();
   return (
     <Popover>
       <PopoverTrigger
+        ref={tapHaptic}
         render={
           <Button
             variant="outline"
@@ -346,7 +364,12 @@ function SettingRow({
         </span>
         {indicator}
       </PopoverTrigger>
-      <PopoverContent side="right" align="start" sideOffset={16} className="w-auto p-4">
+      <PopoverContent
+        side={desktop ? "right" : "top"}
+        align={desktop ? "start" : "center"}
+        sideOffset={desktop ? 16 : 8}
+        className="w-auto max-w-[calc(100vw-2rem)] p-4"
+      >
         <PopoverHeader>
           <PopoverTitle>{label}</PopoverTitle>
         </PopoverHeader>
@@ -421,17 +444,27 @@ function BuildSettings() {
 
 function ActionButton({
   label,
+  shortLabel,
   icon: Icon,
   onClick,
 }: {
   label: string;
+  shortLabel: string;
   icon: LucideIcon;
   onClick: () => void;
 }) {
   return (
-    <Button variant="outline" onClick={onClick} className="rounded-xl">
+    <Button
+      ref={tapHaptic}
+      variant="outline"
+      size="lg"
+      onClick={onClick}
+      aria-label={label}
+      className="rounded-xl"
+    >
       <Icon data-icon="inline-start" />
-      {label}
+      <span className="md:hidden">{shortLabel}</span>
+      <span className="hidden md:inline">{label}</span>
     </Button>
   );
 }
@@ -441,6 +474,7 @@ export function Builder() {
   const setMode = useCow((s) => s.setMode);
   const randomize = useCow((s) => s.randomize);
   useCowInUrl();
+  useStoreHaptics();
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-background">
@@ -456,12 +490,12 @@ export function Builder() {
         value={mode}
         onValueChange={(v) => setMode(v as Mode)}
         render={<aside />}
-        className="absolute inset-x-3 bottom-3 max-h-[45dvh] gap-3 rounded-3xl bg-card p-3 shadow-sm ring-1 ring-foreground/10 md:inset-x-auto md:top-4 md:bottom-4 md:left-4 md:max-h-none md:w-64"
+        className="absolute inset-x-3 bottom-[max(--spacing(3),env(safe-area-inset-bottom))] max-h-[45dvh] gap-3 rounded-3xl bg-card p-3 shadow-sm ring-1 ring-foreground/10 md:inset-x-auto md:top-4 md:bottom-4 md:left-4 md:max-h-none md:w-64"
       >
         <h1 className="px-1 text-lg font-semibold tracking-tight">moo maker</h1>
         <TabsList className="w-full">
-          <TabsTrigger value="famous">Famous cows</TabsTrigger>
-          <TabsTrigger value="build">Build</TabsTrigger>
+          <TabsTrigger ref={tapHaptic} value="famous">Famous cows</TabsTrigger>
+          <TabsTrigger ref={tapHaptic} value="build">Build</TabsTrigger>
         </TabsList>
 
         <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
@@ -476,9 +510,9 @@ export function Builder() {
 
         <Separator />
         <div className="grid grid-cols-3 gap-2 md:grid-cols-1">
-          <ActionButton label="Shuffle" icon={Dices} onClick={randomize} />
-          <ActionButton label="Copy link" icon={Link2} onClick={copyLink} />
-          <ActionButton label="Download PNG" icon={Download} onClick={download} />
+          <ActionButton label="Shuffle" shortLabel="Shuffle" icon={Dices} onClick={randomize} />
+          <ActionButton label="Copy link" shortLabel="Share" icon={Link2} onClick={copyLink} />
+          <ActionButton label="Download PNG" shortLabel="Save" icon={Download} onClick={download} />
         </div>
       </Tabs>
     </main>
