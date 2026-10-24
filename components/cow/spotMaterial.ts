@@ -1,8 +1,7 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 
-// Classic 3D simplex noise (Ashima Arts), prefixed to avoid clashing with three's chunks.
-const NOISE = /* glsl */ `
+const NOISE = `
 vec3 cs_mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
 vec4 cs_mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
 vec4 cs_permute(vec4 x){return cs_mod289(((x*34.0)+1.0)*x);}
@@ -57,11 +56,9 @@ type SpotOptions = {
   amount: number;
   seed: number;
   enabled: boolean;
-  /** Inverse of the cow root's world matrix, so spots stick to the cow while it squashes. */
   cowInverse: { value: THREE.Matrix4 };
 };
 
-/** Clay material with procedural cow spots painted in cow-local space. */
 export function useSpotMaterial({
   base,
   spot,
@@ -119,7 +116,6 @@ diffuseColor.rgb = mix(diffuseColor.rgb, uSpotColor, m * uSpotOn);`,
     const update = (o: Omit<SpotOptions, "cowInverse">) => {
       material.color.set(o.base);
       uniforms.uSpotColor.value.set(o.spot);
-      // More spots → lower noise threshold.
       uniforms.uThreshold.value = THREE.MathUtils.lerp(0.85, -0.25, o.amount);
       uniforms.uSeed.value.set(o.seed * 1.37, o.seed * 0.71, o.seed * 2.13);
       uniforms.uSpotOn.value = o.enabled ? 1 : 0;

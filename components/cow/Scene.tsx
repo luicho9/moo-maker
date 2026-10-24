@@ -5,7 +5,8 @@ import {
   Lightformer,
   OrbitControls,
 } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
+import { useEffect } from "react";
 import { EffectComposer, N8AO, ToneMapping } from "@react-three/postprocessing";
 import { ToneMappingMode } from "postprocessing";
 import * as THREE from "three";
@@ -13,7 +14,6 @@ import { BlobShadow } from "./BlobShadow";
 import { Cow } from "./Cow";
 import { CREAM } from "./store";
 
-/** Khronos PBR Neutral tone mapping, same curve as the ToneMapping pass. */
 function neutral([r, g, b]: number[]) {
   const x = Math.min(r, g, b);
   const offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
@@ -27,7 +27,6 @@ function neutral([r, g, b]: number[]) {
   return c.map((v) => v + (newPeak - v) * k);
 }
 
-/** Linear background color that comes out of tone mapping as exactly CREAM. */
 const background = (() => {
   const target = new THREE.Color(CREAM).toArray();
   const x = [...target];
@@ -38,11 +37,22 @@ const background = (() => {
   return new THREE.Color(x[0], x[1], x[2]);
 })();
 
+function FitCamera() {
+  const get = useThree((s) => s.get);
+  const aspect = useThree((s) => s.size.width / s.size.height);
+  useEffect(() => {
+    const { camera } = get();
+    camera.zoom = Math.min(1, aspect / 1.25);
+    camera.updateProjectionMatrix();
+  }, [get, aspect]);
+  return null;
+}
+
 export default function Scene() {
   return (
     <Canvas
       dpr={[1, 2]}
-      camera={{ position: [4.6, 2.9, 6.2], fov: 32 }}
+      camera={{ position: [5.1, 3.2, 6.9], fov: 32 }}
       gl={{ antialias: false, preserveDrawingBuffer: true }}
     >
       <color attach="background" args={[background.r, background.g, background.b]} />
@@ -56,11 +66,11 @@ export default function Scene() {
         <Lightformer intensity={0.5} color="#FFE2C4" position={[0, 1, -5]} scale={[10, 4, 1]} />
       </Environment>
 
+      <FitCamera />
       <Cow />
 
       <BlobShadow position={[0, 0, 0]} scale={[3.3, 1.8]} />
 
-      {/* Soft occlusion where parts meet gives the "rendered toy" look. */}
       <EffectComposer multisampling={8}>
         <N8AO aoRadius={0.5} distanceFalloff={0.6} intensity={3} color="#3B2A1E" quality="high" />
         <ToneMapping mode={ToneMappingMode.NEUTRAL} />
@@ -68,7 +78,7 @@ export default function Scene() {
 
       <OrbitControls
         makeDefault
-        target={[0.1, 0.5, 0]}
+        target={[0.1, 0.75, 0]}
         enablePan={false}
         enableDamping
         minDistance={5}

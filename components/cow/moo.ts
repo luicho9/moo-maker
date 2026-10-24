@@ -1,6 +1,5 @@
 let ctx: AudioContext | null = null;
 
-/** A tiny synthesized moo: a filtered sawtooth that swoops up then sags. */
 export function moo() {
   ctx ??= new AudioContext();
   const t = ctx.currentTime;

@@ -9,11 +9,12 @@ import { BlobShadow } from "./BlobShadow";
 import { Horns } from "./horns";
 import { moo } from "./moo";
 import { useSpotMaterial } from "./spotMaterial";
-import { BREEDS, useCow } from "./store";
+import { BREEDS, useCow, type CowConfig } from "./store";
 
 const BODY_RADIUS = 0.6;
 const BODY_LENGTH = 0.9;
 const LEG_RADIUS = 0.17;
+const CONFIG_KEYS: (keyof CowConfig)[] = ["breed", "spots", "seed", "chubby", "legs", "horns", "extra"];
 
 function Clay({
   color,
@@ -81,14 +82,13 @@ export function Cow() {
     cowInverse,
   });
 
-  // Little squash-and-stretch whenever the cow changes or moos.
   useEffect(
     () =>
       useCow.subscribe((s, prev) => {
         if (s.moos !== prev.moos) {
           bounce.current = { t: 0, amp: 0.12 };
           mooT.current = 0;
-        } else {
+        } else if (CONFIG_KEYS.some((k) => s[k] !== prev[k])) {
           bounce.current = { t: 0, amp: 0.07 };
         }
       }),
@@ -137,7 +137,6 @@ export function Cow() {
       onPointerOver={() => (document.body.style.cursor = "pointer")}
       onPointerOut={() => (document.body.style.cursor = "")}
     >
-      {/* Body */}
       <mesh
         position={[0, bodyY, 0]}
         rotation={[0, 0, Math.PI / 2]}
@@ -147,13 +146,11 @@ export function Cow() {
         <capsuleGeometry args={[BODY_RADIUS, BODY_LENGTH, 16, 48]} />
       </mesh>
 
-      {/* Udder */}
       <mesh position={[-0.3, bodyY - BODY_RADIUS * s + 0.04, 0]} scale={[1, 0.7, 1]}>
         <sphereGeometry args={[0.17, 32, 24]} />
         <Clay color={breed.snout} />
       </mesh>
 
-      {/* Legs */}
       {[
         [legX, legZ],
         [legX, -legZ],
@@ -172,7 +169,6 @@ export function Cow() {
         </group>
       ))}
 
-      {/* Tail */}
       <group ref={tail} position={[-front + 0.08, bodyY + 0.25 * s, 0]} rotation={[0, 0, -0.35]}>
         <mesh position={[0, -0.3, 0]} material={hide}>
           <capsuleGeometry args={[0.035, 0.5, 8, 16]} />
@@ -183,13 +179,11 @@ export function Cow() {
         </mesh>
       </group>
 
-      {/* Head */}
       <group ref={head} position={[front + 0.12, bodyY + 0.32 * s, 0]}>
         <mesh scale={[1.05, 0.95, 0.95]} material={hide}>
           <sphereGeometry args={[0.42, 48, 32]} />
         </mesh>
 
-        {/* Collar + bell */}
         {cfg.extra === "bell" && (
           <PopIn position={[-0.12, -0.2, 0]} rotation={[0, 0, 0.45]}>
             <mesh rotation={[0, Math.PI / 2, 0]}>
@@ -213,7 +207,6 @@ export function Cow() {
           </PopIn>
         )}
 
-        {/* Snout */}
         <mesh position={[0.3, -0.13, 0]} scale={[0.75, 0.72, 1.12]}>
           <sphereGeometry args={[0.3, 48, 32]} />
           <Clay color={breed.snout} />
@@ -225,7 +218,6 @@ export function Cow() {
           </mesh>
         ))}
 
-        {/* Eyes */}
         {[0.21, -0.21].map((z) => (
           <group key={z} position={[0.3, 0.1, z]}>
             <mesh>
@@ -239,7 +231,6 @@ export function Cow() {
           </group>
         ))}
 
-        {/* Ears */}
         {[1, -1].map((side) => (
           <mesh
             key={side}
@@ -252,10 +243,8 @@ export function Cow() {
           </mesh>
         ))}
 
-        {/* Horns */}
         <Horns kind={cfg.horns} />
 
-        {/* Highland fringe */}
         {breed.tuft && (
           <PopIn position={[0.24, 0.26, 0]}>
             {[-0.18, -0.06, 0.06, 0.18].map((z, i) => (
@@ -267,7 +256,6 @@ export function Cow() {
           </PopIn>
         )}
 
-        {/* Head accessories */}
         {cfg.extra === "crown" && (
           <PopIn position={[-0.02, 0.31, 0]} rotation={[0, 0, -0.15]}>
             <mesh rotation={[Math.PI / 2, 0, 0]}>

@@ -8,7 +8,6 @@ const HORN = "#F3E6CC";
 const TUBULAR = 32;
 const RADIAL = 16;
 
-/** A tube along a smooth curve that tapers from `radius` down to `radius * tip`. */
 function taperedTube(points: [number, number, number][], radius: number, tip: number) {
   const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)));
   const geometry = new THREE.TubeGeometry(curve, TUBULAR, radius, RADIAL, false);

@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 
-/** Soft radial shadow on the ground plane. */
 export function BlobShadow({
   position = [0, 0, 0],
   scale = [1, 1],

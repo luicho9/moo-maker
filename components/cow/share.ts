@@ -5,12 +5,10 @@ const EXTRAS: Extra[] = ["none", "bell", "crown", "hat"];
 
 const pct = (n: number) => Math.round(n * 100);
 
-/** Packs a cow into a short hash like `holstein.50.7.45.35.nubs.bell`. */
 export function encodeCow(c: CowConfig) {
   return [c.breed, pct(c.spots), c.seed, pct(c.chubby), pct(c.legs), c.horns, c.extra].join(".");
 }
 
-/** Reads a cow back from a hash; returns null if anything looks off. */
 export function decodeCow(hash: string): CowConfig | null {
   const [breed, spots, seed, chubby, legs, horns, extra] = hash.replace(/^#/, "").split(".");
   const nums = [spots, seed, chubby, legs].map(Number);

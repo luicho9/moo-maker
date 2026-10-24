@@ -6,7 +6,6 @@ import type * as THREE from "three";
 
 type SpringState = { x: number; v: number };
 
-/** Advances a damped spring one step; returns true once it has settled on the target. */
 function step(s: SpringState, target: number, dt: number, stiffness: number, damping: number) {
   const h = Math.min(dt, 1 / 30);
   s.v += (stiffness * (target - s.x) - damping * s.v) * h;
@@ -19,7 +18,6 @@ function step(s: SpringState, target: number, dt: number, stiffness: number, dam
   return false;
 }
 
-/** A number that springs toward `target`. Only re-renders while it's moving. */
 export function useSpringValue(target: number) {
   const [value, setValue] = useState(target);
   const s = useRef<SpringState>({ x: target, v: 0 });
@@ -31,7 +29,6 @@ export function useSpringValue(target: number) {
   return value;
 }
 
-/** Group that pops in with a springy scale when it mounts. */
 export function PopIn({ children, ...props }: Omit<ThreeElements["group"], "scale">) {
   const ref = useRef<THREE.Group>(null);
   const s = useRef<SpringState>({ x: 0, v: 0 });
