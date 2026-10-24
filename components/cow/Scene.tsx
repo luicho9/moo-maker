@@ -5,13 +5,14 @@ import {
   Lightformer,
   OrbitControls,
 } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
-import { useEffect } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useState } from "react";
 import { EffectComposer, N8AO, ToneMapping } from "@react-three/postprocessing";
 import { ToneMappingMode } from "postprocessing";
 import * as THREE from "three";
 import { BlobShadow } from "./BlobShadow";
 import { Cow } from "./Cow";
+import { flushSnapshots } from "./snapshot";
 import { CREAM } from "./store";
 
 function neutral([r, g, b]: number[]) {
@@ -48,12 +49,21 @@ function FitCamera() {
   return null;
 }
 
+// Runs after EffectComposer's render (priority 1), while the frame is still readable.
+function Snapshots() {
+  const canvas = useThree((s) => s.gl.domElement);
+  useFrame(() => flushSnapshots(canvas), 2);
+  return null;
+}
+
 export default function Scene() {
+  // Phones and tablets get lighter post-processing.
+  const [coarse] = useState(() => window.matchMedia("(pointer: coarse)").matches);
   return (
     <Canvas
       dpr={[1, 2]}
       camera={{ position: [5.1, 3.2, 6.9], fov: 32 }}
-      gl={{ antialias: false, preserveDrawingBuffer: true }}
+      gl={{ antialias: false }}
     >
       <color attach="background" args={[background.r, background.g, background.b]} />
       <hemisphereLight args={["#FFF6E8", "#D9C7AE", 0.6]} />
@@ -71,10 +81,18 @@ export default function Scene() {
 
       <BlobShadow position={[0, 0, 0]} scale={[3.3, 1.8]} />
 
-      <EffectComposer multisampling={8}>
-        <N8AO aoRadius={0.5} distanceFalloff={0.6} intensity={3} color="#3B2A1E" quality="high" />
+      <EffectComposer multisampling={coarse ? 4 : 8}>
+        <N8AO
+          aoRadius={0.5}
+          distanceFalloff={0.6}
+          intensity={3}
+          color="#3B2A1E"
+          quality={coarse ? "medium" : "high"}
+        />
         <ToneMapping mode={ToneMappingMode.NEUTRAL} />
       </EffectComposer>
+
+      <Snapshots />
 
       <OrbitControls
         makeDefault

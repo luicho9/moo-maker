@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import { PopIn } from "./anim";
+import { clay } from "./materials";
 
 const HORN = "#F3E6CC";
 const TUBULAR = 32;
@@ -66,22 +67,9 @@ function Horn({ kind, side }: { kind: keyof typeof SHAPES; side: 1 | -1 }) {
 
   return (
     <PopIn position={[bx, by, bz * side]}>
-      <mesh geometry={geometry}>
-        <meshPhysicalMaterial
-          color={HORN}
-          roughness={0.4}
-          clearcoat={0.3}
-          clearcoatRoughness={0.35}
-        />
-      </mesh>
-      <mesh position={end}>
+      <mesh geometry={geometry} material={clay(HORN, 0.4)} />
+      <mesh position={end} material={clay(HORN, 0.4)}>
         <sphereGeometry args={[tipRadius, 16, 12]} />
-        <meshPhysicalMaterial
-          color={HORN}
-          roughness={0.4}
-          clearcoat={0.3}
-          clearcoatRoughness={0.35}
-        />
       </mesh>
     </PopIn>
   );

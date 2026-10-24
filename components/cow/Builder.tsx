@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { isPresetId, PRESETS, type PresetId } from "./presets";
 import { BodyIcon, HeadIcon } from "./icons";
 import { decodeCow, encodeCow } from "./share";
+import { requestSnapshot } from "./snapshot";
 import {
   BREEDS,
   CREAM,
@@ -54,23 +55,33 @@ const EXTRAS: { id: Extra; label: string }[] = [
 ];
 
 function download() {
-  const src = document.querySelector<HTMLCanvasElement>("#cow-canvas canvas");
-  if (!src) return;
-  const out = document.createElement("canvas");
-  out.width = src.width;
-  out.height = src.height;
-  const ctx = out.getContext("2d")!;
-  ctx.fillStyle = CREAM;
-  ctx.fillRect(0, 0, out.width, out.height);
-  ctx.drawImage(src, 0, 0);
-  const a = document.createElement("a");
-  a.download = "vaquita.png";
-  a.href = out.toDataURL("image/png");
-  a.click();
+  requestSnapshot((src) => {
+    const out = document.createElement("canvas");
+    out.width = src.width;
+    out.height = src.height;
+    const ctx = out.getContext("2d")!;
+    ctx.fillStyle = CREAM;
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(src, 0, 0);
+    out.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement("a");
+      a.download = "vaquita.png";
+      a.href = URL.createObjectURL(blob);
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href));
+    }, "image/png");
+  });
 }
 
+const cowHash = () => {
+  const s = useCow.getState();
+  return `#${s.preset ?? encodeCow(s)}`;
+};
+
 async function copyLink() {
-  await navigator.clipboard.writeText(window.location.href);
+  const { origin, pathname, search } = window.location;
+  await navigator.clipboard.writeText(`${origin}${pathname}${search}${cowHash()}`);
   toast("Link copied");
 }
 
@@ -81,14 +92,20 @@ function useCowInUrl() {
     if (isPresetId(hash)) useCow.getState().applyPreset(hash);
     else if (fromUrl) useCow.getState().set(fromUrl);
 
-    const write = () => {
-      const s = useCow.getState();
-      history.replaceState(null, "", `#${s.preset ?? encodeCow(s)}`);
-    };
+    const write = () => history.replaceState(null, "", cowHash());
     write();
-    return useCow.subscribe((s, prev) => {
-      if (s.moos === prev.moos) write();
+    // Slider drags fire every frame; browsers throttle replaceState past ~100 calls per 10s.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = useCow.subscribe((s, prev) => {
+      if (s.moos === prev.moos) {
+        clearTimeout(timer);
+        timer = setTimeout(write, 200);
+      }
     });
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, []);
 }
 
@@ -427,7 +444,7 @@ export function Builder() {
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-background">
-      <div id="cow-canvas" className="absolute inset-x-0 top-0 bottom-[45dvh] md:bottom-0 md:left-72">
+      <div className="absolute inset-x-0 top-0 bottom-[45dvh] md:bottom-0 md:left-72">
         <Scene />
       </div>
 

@@ -53,7 +53,6 @@ float cs_snoise(vec3 v){
 type SpotOptions = {
   base: string;
   spot: string;
-  amount: number;
   seed: number;
   enabled: boolean;
   cowInverse: { value: THREE.Matrix4 };
@@ -62,12 +61,11 @@ type SpotOptions = {
 export function useSpotMaterial({
   base,
   spot,
-  amount,
   seed,
   enabled,
   cowInverse,
 }: SpotOptions) {
-  const { material, update } = useMemo(() => {
+  const { material, update, setAmount } = useMemo(() => {
     const uniforms = {
       uSpotColor: { value: new THREE.Color() },
       uThreshold: { value: 0 },
@@ -116,18 +114,21 @@ diffuseColor.rgb = mix(diffuseColor.rgb, uSpotColor, m * uSpotOn);`,
     const update = (o: Omit<SpotOptions, "cowInverse">) => {
       material.color.set(o.base);
       uniforms.uSpotColor.value.set(o.spot);
-      uniforms.uThreshold.value = THREE.MathUtils.lerp(0.85, -0.25, o.amount);
       uniforms.uSeed.value.set(o.seed * 1.37, o.seed * 0.71, o.seed * 2.13);
       uniforms.uSpotOn.value = o.enabled ? 1 : 0;
     };
-    return { material, update };
+    // Called every frame by the spots spring, so it skips React entirely.
+    const setAmount = (amount: number) => {
+      uniforms.uThreshold.value = THREE.MathUtils.lerp(0.85, -0.25, amount);
+    };
+    return { material, update, setAmount };
   }, [cowInverse]);
 
   useEffect(() => {
-    update({ base, spot, amount, seed, enabled });
-  }, [update, base, spot, amount, seed, enabled]);
+    update({ base, spot, seed, enabled });
+  }, [update, base, spot, seed, enabled]);
 
   useEffect(() => () => material.dispose(), [material]);
 
-  return material;
+  return { material, setAmount };
 }

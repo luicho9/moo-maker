@@ -1,12 +1,12 @@
 "use client";
 
 import { useFrame, type ThreeElements } from "@react-three/fiber";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import type * as THREE from "three";
 
-type SpringState = { x: number; v: number };
+export type SpringState = { x: number; v: number };
 
-function step(s: SpringState, target: number, dt: number, stiffness: number, damping: number) {
+export function step(s: SpringState, target: number, dt: number, stiffness: number, damping: number) {
   const h = Math.min(dt, 1 / 30);
   s.v += (stiffness * (target - s.x) - damping * s.v) * h;
   s.x += s.v * h;
@@ -16,17 +16,6 @@ function step(s: SpringState, target: number, dt: number, stiffness: number, dam
     return true;
   }
   return false;
-}
-
-export function useSpringValue(target: number) {
-  const [value, setValue] = useState(target);
-  const s = useRef<SpringState>({ x: target, v: 0 });
-  useFrame((_, dt) => {
-    if (s.current.x === target && s.current.v === 0) return;
-    step(s.current, target, dt, 170, 16);
-    setValue(s.current.x);
-  });
-  return value;
 }
 
 export function PopIn({ children, ...props }: Omit<ThreeElements["group"], "scale">) {
