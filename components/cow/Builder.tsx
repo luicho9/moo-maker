@@ -66,7 +66,7 @@ function download() {
     out.toBlob((blob) => {
       if (!blob) return;
       const a = document.createElement("a");
-      a.download = "vaquita.png";
+      a.download = "moo-maker.png";
       a.href = URL.createObjectURL(blob);
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href));
@@ -458,7 +458,7 @@ export function Builder() {
         render={<aside />}
         className="absolute inset-x-3 bottom-3 max-h-[45dvh] gap-3 rounded-3xl bg-card p-3 shadow-sm ring-1 ring-foreground/10 md:inset-x-auto md:top-4 md:bottom-4 md:left-4 md:max-h-none md:w-64"
       >
-        <h1 className="px-1 text-lg font-semibold tracking-tight">vaquita</h1>
+        <h1 className="px-1 text-lg font-semibold tracking-tight">moo maker</h1>
         <TabsList className="w-full">
           <TabsTrigger value="famous">Famous cows</TabsTrigger>
           <TabsTrigger value="build">Build</TabsTrigger>
