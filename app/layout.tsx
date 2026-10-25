@@ -10,6 +10,7 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://moo-maker.vercel.app"),
   title: "moo maker",
   description: "Build your own 3D cow",
 };
